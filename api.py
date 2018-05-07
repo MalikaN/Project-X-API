@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_restful import Resource,Api,reqparse
 from flaskext.mysql import MySQL
+from flask_cors import CORS
 
 mysql = MySQL()
 app = Flask(__name__)
@@ -13,6 +14,10 @@ app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 
 mysql.init_app(app)
 api = Api(app)
+
+CORS(app, origins="http://127.0.0.1:5000", allow_headers=[
+    "Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
+    supports_credentials=True)
 
 
 class root(Resource):
@@ -43,6 +48,37 @@ class createUser(Resource):
     
         except Exception as e :
             return {'error':str(e)}
+
+class authenticateUser(Resource):
+    def post(self):
+        try:
+            parse = reqparse.RequestParser()
+            parse.add_argument('username',type=str,help='username for authentication')
+            parse.add_argument('password',type=str,help='password for authrntication')
+
+            args = parse.parse_args()
+            __userName = args['username']
+            __Pwd = args['password']
+
+            conn = mysql.connect()
+            cursor = conn.cursor()
+
+            cursor.callproc('spAuthenticateUser',(__userName,))
+            data = cursor.fetchall()
+
+            if (len(data)>0):
+                if(str(data[0][2]) == __Pwd):
+                       return {'status':200,'UserId':'Login Success'}
+                else:
+                    return {'status':100,'message':'Authentication failure'}
+
+        except Exception as e:
+            return {'error': str(e)}
+
+
+
+
+
 
 class addItems(Resource):
     def post(self):
@@ -96,8 +132,8 @@ class getAllItems(Resource):
 class getItem(Resource):
     def get(self,id):
         try:
-            parse = reqparse.RequestParser()
-            parse.add_argument('id',type=int)
+            # parse = reqparse.RequestParser()
+            # parse.add_argument('id',type=int)
 
             # args = parse.parse_args()
             # args['id'] = str(id)
@@ -105,19 +141,18 @@ class getItem(Resource):
 
             conn = mysql.connect()
             cursor = conn.cursor()
-
-            cursor.callproc('spGetItem',__id,)
+            cursor.callproc('spGetItem',(__id,))
             data = cursor.fetchall()
 
-            item = []
+            items = []
 
             for item in data:
                 i = {
                      'ItemName' : item[0],
-                    'itemPrice' : item[1],
-                    'Itemqty' : item[2]
+                     'itemPrice' : item[1],
+                     'Itemqty' : item[2]
                 }
-                item.append(i)
+                items.append(i)
 
             return {'StatusCode':'200','Items':item}
 
@@ -127,10 +162,11 @@ class getItem(Resource):
 
 
 api.add_resource(root,'/')
+api.add_resource(authenticateUser,'/login')
 api.add_resource(createUser,'/createuser')
 api.add_resource(addItems,'/additems')
 api.add_resource(getAllItems,'/getallitems')
-api.add_resource(getItem,'/getitem/<int:id>') #this raise error#
+api.add_resource(getItem,'/getitem/<int:id>')
 
 if __name__ == '__main__':
     app.run(debug=True)
